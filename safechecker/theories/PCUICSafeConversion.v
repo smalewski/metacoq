@@ -1284,8 +1284,11 @@ Section Conversion.
     now constructor ; eapply typing_wf_local in X.
   Qed.
 
-  Definition eqb_universe_instance u v :=
-    forallb2 (check_eqb_universe G) (map Universe.make u) (map Universe.make v).
+  Definition eqb_universe_instance_gen eq u v :=
+    forallb2 eq (map Universe.make u) (map Universe.make v).
+
+  Definition eqb_universe_instance :=
+    eqb_universe_instance_gen (check_eqb_universe G). 
 
   Lemma eqb_universe_instance_spec :
     forall u v,
@@ -1318,12 +1321,12 @@ Section Conversion.
     destruct heΣ.
     destruct leq; cbn.
     - eapply check_eqb_universe_complete; try apply wf_env_graph_wf; eauto.
-      + now apply wf_ext_global_uctx_invariants.
-      + now apply global_ext_uctx_consistent.
+      + now apply (@wf_ext_global_uctx_invariants _ (lift_typing typing)).
+      + now apply (@global_ext_uctx_consistent _ (lift_typing typing)).
     - eapply check_leqb_universe_complete; try apply wf_env_graph_wf; eauto.
-      + now apply wf_ext_global_uctx_invariants.
-      + now apply global_ext_uctx_consistent.
-  Qed.
+      + now apply (@wf_ext_global_uctx_invariants _ (lift_typing typing)).
+      + now apply (@global_ext_uctx_consistent _ (lift_typing typing)).
+Qed.
   
   Lemma get_level_make l :
     UnivExpr.get_level (UnivExpr.make l) = l.
@@ -2960,7 +2963,7 @@ Section Conversion.
       | Error ce not_conv_params => no ce;
 
       | Success conv_params
-        with inspect (eqb_universe_instance p1.(puinst) p2.(puinst)) := {
+        with inspect (eqb_universe_instance_gen (wf_env_eq Σ) p1.(puinst) p2.(puinst)) := {
 
         | exist false not_eq_insts => no (CasePredUnequalUniverseInstances
                                             (Γ,,, stack_context π1) ci1 p1 c1 brs1
@@ -2997,7 +3000,7 @@ Section Conversion.
     constructor.
   Qed.
   Next Obligation.
-    destruct hΣ.
+    destruct hΣ. rewrite <- wf_env_eq_correct in eq_insts. 
     apply eq_sym, eqb_universe_instance_spec in eq_insts.
     destruct (case_conv_preds_inv h1 _ _ _ h2 hx eq_insts conv_params) as []; tea.
     destruct hx as [hx].
@@ -3016,6 +3019,7 @@ Section Conversion.
   Qed.
   Next Obligation.
     unfold zipp in conv_ret; simpl in conv_ret.
+    rewrite <- wf_env_eq_correct in eq_insts. 
     apply eq_sym, eqb_universe_instance_spec in eq_insts.
     destruct (case_conv_preds_inv h1 _ _ _ h2 hx eq_insts conv_params) as []; tea.
     destruct hx as [hx]. destruct conv_params as [conv_params].
@@ -3043,6 +3047,8 @@ Section Conversion.
     apply consistent_instance_ext_wf in cons0.
     destruct H as [[]].
     apply eqb_universe_instance_complete in r; auto.
+    rewrite <- wf_env_eq_correct in not_eq_insts. 
+    unfold eqb_universe_instance, G in r.
     congruence.
   Qed.
   Next Obligation.
@@ -3077,7 +3083,7 @@ Section Conversion.
     | prog_view_App _ _ _ _ := False_rect _ _;
 
     | prog_view_Const c u c' u' with eq_dec c c' := {
-      | left eq1 with inspect (eqb_universe_instance u u') := {
+      | left eq1 with inspect (eqb_universe_instance_gen (wf_env_eq Σ) u u') := {
         | @exist true eq2 with isconv_args_raw leq (tConst c u) π1 (tConst c' u') π2 aux := {
           | Success h := yes ;
           (* Unfold both constants at once *)
@@ -3286,7 +3292,8 @@ Section Conversion.
     constructor. eapply equality_eq_le_gen.
     constructor. all:fvs. 
     - destruct h. eapply welltyped_zipc_zipp in h1; auto. fvs.
-    - constructor. eapply eqb_universe_instance_spec. auto.
+    - constructor. eapply eqb_universe_instance_spec.
+      rewrite <- wf_env_eq_correct in eq2. auto.
   Qed.
   Next Obligation.
     pose (wf_env_ext_sq_wf _ Σ). sq.
@@ -3357,7 +3364,8 @@ Section Conversion.
     congruence.
   Qed.
   Next Obligation.
-    right; split; [easy|].
+    right; split; [easy|]. rewrite <- wf_env_eq_correct in uneq_u.
+    unfold eqb_universe_instance, G.  
     now rewrite <- uneq_u.
   Qed.
 

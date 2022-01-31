@@ -25,6 +25,7 @@ From MetaCoq.PCUIC Require Import PCUICWellScopedCumulativity.
 From MetaCoq.PCUIC Require Import PCUICSN.
 From MetaCoq.Template Require Import config utils.
 From MetaCoq.SafeChecker Require Import PCUICSafeReduce.
+From MetaCoq.SafeChecker Require Import PCUICWfEnv.
 
 Local Opaque hnf.
 
@@ -116,15 +117,20 @@ Qed.
 
 Definition binder := {| binder_name := nNamed "P"; binder_relevance := Relevant |}.
 
-Theorem pcuic_consistent {cf:checker_flags} {nor : normalizing_flags} Σ t :
-  wf_ext Σ ->
-  axiom_free Σ ->
+Definition canonical_wf_env_impl {cf:checker_flags} : wf_env_impl := 
+  (wf_env_ext ; canonincal_wf_env_struct ; canonincal_wf_env_prop).
+
+
+Theorem pcuic_consistent {cf:checker_flags} {nor : normalizing_flags} (_Σ :wf_env_ext) t :
+  axiom_free _Σ ->
   (* t : forall (P : Prop), P *)
-  Σ ;;; [] |- t : tProd binder (tSort Prop_univ) (tRel 0) ->
+  _Σ ;;; [] |- t : tProd binder (tSort Prop_univ) (tRel 0) ->
   False.
 Proof.
-  intros wfΣ axfree cons.
+  intros axfree cons.
+  set (Σ := wf_env_ext_env _Σ); set (wfΣ := wf_env_ext_wf _Σ).
   set (Σext := ((make_fresh_name Σ, InductiveDecl False_mib) :: Σ.1, Σ.2)).
+  destruct wfΣ as [wfΣ].
   assert (wf': wf_ext Σext).
   { constructor; [constructor|].
     - destruct wfΣ; auto.
@@ -177,10 +183,11 @@ Proof.
       auto.
     - cbn.
       auto. }
-(*   assert (sqwf: ∥ wf (Σ', Σ.2).1 ∥) by now destruct wf'.*)
   pose proof (iswelltyped _ _ _ _ typ_false) as wt.
-  pose proof (hnf_sound (sq wf') (h := wt)) as [r].
-  pose proof (hnf_complete (sq wf') (h := wt)) as [w].
+  pose proof (G' := graph_of_wf_ext (sq wf')).
+  set (_Σ' := Build_wf_env_ext cf Σext (sq wf') (projT1 G') (projT2 G')).
+  pose proof (hnf_sound (Σ_type := canonical_wf_env_impl) (_Σ := _Σ') (h := wt)) as [r].
+  pose proof (hnf_complete (Σ_type := canonical_wf_env_impl) (_Σ := _Σ') (h := wt)) as [w].
   eapply subject_reduction_closed in typ_false; eauto.
   eapply whnf_ind_finite with (indargs := []) in typ_false as ctor; auto.
   - unfold isConstruct_app in ctor.
