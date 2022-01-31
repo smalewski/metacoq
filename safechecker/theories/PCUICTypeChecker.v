@@ -9,7 +9,7 @@ From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICTactics
      PCUICPretty PCUICArities PCUICConfluence PCUICSize
      PCUICContextConversion PCUICContextConversionTyp
      PCUICConversion PCUICWfUniverses
-     PCUICGlobalEnv PCUICEqualityDec PCUICSigmaCalculus
+     PCUICGlobalEnv PCUICSigmaCalculus
      (* Used for support lemmas *)
      PCUICInductives PCUICWfUniverses
      PCUICOnFreeVars PCUICWellScopedCumulativity
@@ -19,7 +19,7 @@ From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICTactics
 
 From MetaCoq.PCUIC Require Import BDTyping BDToPCUIC BDFromPCUIC BDUnique.
 
-From MetaCoq.SafeChecker Require Import PCUICSafeReduce PCUICErrors
+From MetaCoq.SafeChecker Require Import PCUICEqualityDec PCUICSafeReduce PCUICErrors
   PCUICSafeConversion PCUICWfReduction PCUICWfEnv.
 
 From Equations Require Import Equations.
@@ -164,8 +164,15 @@ Lemma substitution_wf_local_rel `{checker_flags} {Σ} {wfΣ : wf Σ} {Γ Γ' s �
 Section Typecheck.
   Context
     {cf : checker_flags} {nor : normalizing_flags}
-    {Σ : global_env_ext} (HΣ : ∥ wf_ext Σ ∥)
-    (G : universes_graph) (HG : is_graph_of_uctx G (global_ext_uctx Σ)).
+    {Σ_type : wf_env_impl} {Σ : Σ_type.π1}.
+
+    Local Definition gΣ := wf_env_env Σ. 
+    Local Definition heΣ : ∥ wf_ext gΣ ∥ := wf_env_wf Σ.
+  
+    Local Definition G : universes_graph := wf_env_graph Σ.
+    Local Definition HG : is_graph_of_uctx G (global_ext_uctx gΣ) := wf_env_graph_wf Σ.
+  
+    Local Definition HΣ : ∥ wf gΣ ∥ := map_squash (wf_ext_wf _) heΣ.
 
   Local Notation ret := Checked_comp (only parsing).
   Local Notation raise := (fun e => TypeError_comp e _) (only parsing).
@@ -185,16 +192,18 @@ Section Typecheck.
   Opaque reduce_stack_full.
 
   Notation hnf := (hnf HΣ).
+
   
+
   (* replaces convert and convert_leq*)
   Equations convert (le : conv_pb) Γ t u
-          (ht : welltyped Σ Γ t) (hu : welltyped Σ Γ u)
-    : typing_result_comp (∥ Σ ;;; Γ ⊢ t ≤[le] u ∥) :=
+          (ht : welltyped gΣ Γ t) (hu : welltyped gΣ Γ u)
+    : typing_result_comp (∥ gΣ ;;; Γ ⊢ t ≤[le] u ∥) :=
     convert le Γ t u ht hu
       with inspect (eqb_termp Σ G le t u) := {
         | @exist true He := ret _ ; 
         | @exist false He with
-          inspect (isconv_term Σ HΣ G HG Γ le t ht u hu) := {
+          inspect (isconv_term _ Σ G HG Γ le t ht u hu) := {
           | @exist ConvSuccess Hc := ret _ ;
           | @exist (ConvError e) Hc :=
             let t' := hnf Γ t ht in

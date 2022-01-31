@@ -19,7 +19,7 @@ From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICTactics PCUICAriti
 
 From MetaCoq.PCUIC Require Import BDTyping BDToPCUIC BDFromPCUIC BDUnique.
 
-From MetaCoq.SafeChecker Require Import PCUICErrors PCUICSafeReduce.
+From MetaCoq.SafeChecker Require Import PCUICErrors PCUICSafeReduce PCUICWfEnv.
 
 (** Allow reduction to run inside Coq *)
 Transparent Acc_intro_generator.
@@ -137,10 +137,18 @@ Qed.
 
 Section TypeOf.
   Context {cf : checker_flags} {nor : normalizing_flags}.
-  Context (Σ : global_env_ext).
-  Context (hΣ : ∥ wf_ext Σ ∥).
 
-Definition on_subterm P Pty Γ t : Type := 
+  Context {Σ_type : wf_env_impl} {Σ : Σ_type.π1}.
+
+  Local Definition gΣ := wf_env_env Σ. 
+  Local Definition heΣ : ∥ wf_ext gΣ ∥ := wf_env_wf Σ.
+
+  Local Definition G : universes_graph := wf_env_graph Σ.
+  Local Definition HG : is_graph_of_uctx G (global_ext_uctx gΣ) := wf_env_graph_wf Σ.
+
+  Local Definition hΣ : ∥ wf gΣ ∥ := map_squash (wf_ext_wf _) heΣ.
+
+  Definition on_subterm P Pty Γ t : Type := 
   match t with
   | tProd na t b => Pty Γ t * Pty (Γ ,, vass na t) b
   | tLetIn na d t t' => 
@@ -150,7 +158,7 @@ Definition on_subterm P Pty Γ t : Type :=
   end.
 
 Lemma welltyped_subterm {Γ t} :
-  wellinferred Σ Γ t -> on_subterm (wellinferred Σ) (well_sorted Σ) Γ t.
+  wellinferred gΣ Γ t -> on_subterm (wellinferred gΣ) (well_sorted gΣ) Γ t.
 Proof.
   destruct t; simpl; auto; intros [T HT]; sq.
   now inversion HT ; auto; split; do 2 econstructor.
@@ -162,9 +170,9 @@ Qed.
   #[local] Notation ret t := (t; _).
 
   #[local] Definition principal_type Γ t := 
-    ∑ T : term, ∥ Σ ;;; Γ |- t ▹ T ∥.
+    ∑ T : term, ∥ gΣ ;;; Γ |- t ▹ T ∥.
   #[local] Definition principal_sort Γ T := 
-    ∑ u, ∥ Σ ;;; Γ |- T ▹□ u ∥.
+    ∑ u, ∥ gΣ ;;; Γ |- T ▹□ u ∥.
   #[local] Definition principal_type_type {Γ t} (wt : principal_type Γ t) : term
     := projT1 wt.
   #[local] Definition principal_sort_sort {Γ T} (ps : principal_sort Γ T) : Universe.t
@@ -173,16 +181,16 @@ Qed.
   #[local] Coercion principal_sort_sort : principal_sort >-> Universe.t.
 
   Program Definition infer_as_sort {Γ T}
-    (wfΓ : ∥ wf_local Σ Γ ∥)
-    (wf : well_sorted Σ Γ T)
+    (wfΓ : ∥ wf_local gΣ Γ ∥)
+    (wf : well_sorted gΣ Γ T)
     (tx : principal_type Γ T) : principal_sort Γ T :=
-    match @reduce_to_sort cf nor Σ hΣ Γ tx _ with
+    match @reduce_to_sort cf nor _ Σ Γ tx _ with
     | Checked_comp (u;_) => (u;_)
     | TypeError_comp e _ => !
     end.
   Next Obligation.
     destruct tx ; cbn in *.
-    destruct wf as [[]].
+    destruct wf as [[]], hΣ as [wΣ].
     sq.
     eapply infering_typing, validity in s as []; eauto.
     now eexists.
@@ -200,21 +208,21 @@ Qed.
     destruct tx.
     cbn in *.
     sq.
-    destruct wf as [[? i]].
+    destruct wf as [[? i]], hΣ as [wΣ].
     eapply infering_sort_infering in i ; eauto.
   Qed.
 
   Program Definition infer_as_prod Γ T
-    (wfΓ : ∥ wf_local Σ Γ ∥)
-    (wf : welltyped Σ Γ T)
-    (isprod : ∥ ∑ na A B, red Σ Γ T (tProd na A B) ∥) : 
-    ∑ na' A' B', ∥ Σ ;;; Γ ⊢ T ⇝ tProd na' A' B' ∥ :=
-    match @reduce_to_prod cf nor Σ hΣ Γ T wf with
+    (wfΓ : ∥ wf_local gΣ Γ ∥)
+    (wf : welltyped gΣ Γ T)
+    (isprod : ∥ ∑ na A B, red gΣ Γ T (tProd na A B) ∥) : 
+    ∑ na' A' B', ∥ gΣ ;;; Γ ⊢ T ⇝ tProd na' A' B' ∥ :=
+    match @reduce_to_prod cf nor _ Σ Γ T wf with
     | Checked_comp p => p
     | TypeError_comp e _ => !
     end.
     Next Obligation.
-      clear Heq_anonymous.
+      clear Heq_anonymous. pose hΣ.
       sq.
       destruct isprod as (?&?&?&?).
       apply wildcard'.
@@ -227,8 +235,8 @@ Qed.
     Qed.
     
   Equations lookup_ind_decl ind : typing_result
-        (∑ decl body, declared_inductive (fst Σ) ind decl body) :=
-  lookup_ind_decl ind with inspect (lookup_env (fst Σ) ind.(inductive_mind)) :=
+        (∑ decl body, declared_inductive (fst gΣ) ind decl body) :=
+  lookup_ind_decl ind with inspect (lookup_env (fst gΣ) ind.(inductive_mind)) :=
     { | exist (Some (InductiveDecl decl)) look with inspect (nth_error decl.(ind_bodies) ind.(inductive_ind)) :=
       { | exist (Some body) eqnth => Checked (decl; body; _);
         | exist None _ => raise (UndeclaredInductive ind) };
@@ -241,7 +249,7 @@ Qed.
   Defined.
 
   Lemma lookup_ind_decl_complete ind e : lookup_ind_decl ind = TypeError e -> 
-    ((∑ mdecl idecl, declared_inductive Σ ind mdecl idecl) -> False).
+    ((∑ mdecl idecl, declared_inductive gΣ ind mdecl idecl) -> False).
   Proof.
     apply_funelim (lookup_ind_decl ind).
     1-2:intros * _ her [mdecl [idecl [declm decli]]];
@@ -259,7 +267,7 @@ Qed.
     end.
 
 
-  Equations infer (Γ : context) (wfΓ : ∥ wf_local Σ Γ ∥) (t : term) (wt : wellinferred Σ Γ t) :
+  Equations infer (Γ : context) (wfΓ : ∥ wf_local gΣ Γ ∥) (t : term) (wt : wellinferred gΣ Γ t) :
     principal_type Γ t
     by struct t :=
    infer Γ wfΓ (tRel n) wt with 
@@ -273,7 +281,7 @@ Qed.
     infer Γ wfΓ (tSort s) wt := ret (tSort (Universe.super s));
 
     infer Γ wfΓ (tProd n ty b) wt :=
-      let wfΓ' : ∥ wf_local Σ (Γ ,, vass n ty) ∥ := _ in
+      let wfΓ' : ∥ wf_local gΣ (Γ ,, vass n ty) ∥ := _ in
       let ty1 := infer Γ wfΓ ty (welltyped_subterm wt).1 in
       let s1 := infer_as_sort wfΓ (welltyped_subterm wt).1 ty1 in
       let ty2 := infer (Γ ,, vass n ty) wfΓ' b (welltyped_subterm wt).2 in
@@ -293,7 +301,7 @@ Qed.
       let pi := infer_as_prod Γ ty wfΓ _ _ in
       ret (subst10 a pi.π2.π2.π1);
 
-    infer Γ wfΓ (tConst cst u) wt with inspect (lookup_env (fst Σ) cst) :=
+    infer Γ wfΓ (tConst cst u) wt with inspect (wf_env_lookup Σ cst) :=
       { | exist (Some (ConstantDecl d)) _ := ret (subst_instance u d.(cst_type));
         |  _ := ! };
 
@@ -308,7 +316,7 @@ Qed.
       | exist (TypeError e) _ => ! };
 
     infer Γ wfΓ (tCase ci p c brs) wt
-      with inspect (reduce_to_ind hΣ Γ (infer Γ wfΓ c _) _) :=
+      with inspect (reduce_to_ind Γ (infer Γ wfΓ c _) _) :=
       { | exist (Checked_comp indargs) _ =>
           let ptm := it_mkLambda_or_LetIn (inst_case_predicate_context p) p.(preturn) in
           ret (mkApps ptm (List.skipn ci.(ci_npar) indargs.π2.π2.π1 ++ [c]));
@@ -316,7 +324,7 @@ Qed.
 
     infer Γ wfΓ (tProj (ind, n, k) c) wt with inspect (@lookup_ind_decl ind) :=
       { | exist (Checked d) _ with inspect (nth_error d.π2.π1.(ind_projs) k) :=
-        { | exist (Some pdecl) _ with inspect (reduce_to_ind hΣ Γ (infer Γ wfΓ c _) _) :=
+        { | exist (Some pdecl) _ with inspect (reduce_to_ind Γ (infer Γ wfΓ c _) _) :=
           { | exist (Checked_comp indargs) _ => 
               let ty := snd pdecl in
               ret (subst0 (c :: List.rev (indargs.π2.π2.π1)) (subst_instance indargs.π2.π1 ty));
@@ -346,11 +354,7 @@ Qed.
   Qed.
 
   Next Obligation.
-    depind HT.
-  Qed.
-
-  Next Obligation.
-    depind HT.
+    now inversion HT.
   Qed.
 
   Next Obligation.
@@ -358,7 +362,11 @@ Qed.
   Qed.
 
   Next Obligation.
-    sq.
+    now inversion HT.
+  Qed.
+
+  Next Obligation.
+    pose hΣ. sq.
     constructor ; tea.
     inversion HT ; subst.
     now eapply infering_sort_isType.
@@ -370,7 +378,7 @@ Qed.
   Defined.
 
   Next Obligation.
-    sq.
+    pose hΣ. sq.
     inversion HT ; subst.
     constructor ; tea.
     now eapply infering_sort_isType.
@@ -383,7 +391,7 @@ Qed.
   Defined.
 
   Next Obligation.
-    sq.
+    pose hΣ. sq.
     inversion HT ; subst.
     constructor ; tea.
     1: now eapply infering_sort_isType.
@@ -406,12 +414,12 @@ Qed.
   Next Obligation.
     case ty as [].
     apply wat_welltyped ; tea.
-    sq.
+    pose hΣ. sq.
     eapply validity, infering_typing ; eauto.
   Defined.
   Next Obligation.
     case ty as [].
-    sq.
+    pose hΣ. sq.
     inversion HT ; subst.
     eapply infering_prod_infering in X as (?&?&[]); eauto.
     do 3 eexists.
@@ -421,7 +429,7 @@ Qed.
     case pi as (?&?&[]).
     case ty as [].
     cbn in *.
-    sq.
+    pose hΣ. sq.
     inversion HT ; subst.
     inversion X0 ; subst.
     move: (X) => tyt.
@@ -445,17 +453,21 @@ Qed.
   Defined.
 
   Next Obligation.
-    sq.
-    inversion HT.
+    pose hΣ. sq.
+    inversion HT; subst. 
+    rewrite <- wf_env_lookup_correct in e. 
+    rewrite isdecl in e. inversion e. subst.   
     now constructor.
   Qed.
   Next Obligation.
     inversion HT ; subst.
-    congruence.
+    clear wildcard. rewrite <- wf_env_lookup_correct in e. 
+    rewrite isdecl in e. inversion e.
   Qed.
   Next Obligation.
     inversion HT ; subst.
-    congruence.
+    clear wildcard. rewrite <- wf_env_lookup_correct in e. 
+    rewrite isdecl in e. inversion e.
   Qed.
 
   Next Obligation.
@@ -507,6 +519,10 @@ Qed.
     now do 2 eexists.
   Qed.
   
+  Next Obligation. eauto. Defined.  
+
+  Next Obligation. eauto. Defined.   
+ 
   Next Obligation.
     inversion HT ; subst.
     inversion X.
@@ -514,7 +530,7 @@ Qed.
   Qed.
   Next Obligation.
     destruct infer.
-    sq.
+    pose hΣ; sq.
     cbn.
     apply infering_typing, validity in s as [] ; eauto.
     now eexists.
@@ -525,7 +541,7 @@ Qed.
     destruct infer.
     destruct indargs as (?&?&?&?).
     cbn in *.
-    sq.
+    pose hΣ; sq.
     inversion HT ; subst.
     move: (X) => inf.
     eapply infering_ind_ind in inf as [? []].
@@ -561,20 +577,24 @@ Qed.
   Next Obligation.
     destruct infer as [? i].
     cbn in *.
-    sq.
+    pose hΣ; sq.
     apply a0.
     inversion HT ; subst.
     eapply infering_ind_infering in i as [? []] ; eauto.
   Defined.
 
-  Next Obligation.
+  Next Obligation. eauto. Defined. 
+
+  Next Obligation. eauto. Defined.
+
+  Next Obligation.  
     inversion HT.
     inversion X.
     now econstructor.
   Qed.
   Next Obligation.
     destruct infer.
-    sq.
+    pose hΣ; sq.
     cbn.
     eapply infering_typing, validity in s as []; eauto.
     now eexists.
@@ -585,7 +605,7 @@ Qed.
     destruct d as (?&?&isdecl).
     clear e.
     cbn -[lookup_ind_decl] in *.
-    sq. 
+    pose hΣ; sq. 
     inversion HT ; subst.
     destruct H1 as [[isdecl' ] []].
     cbn -[nth_error] in *.
@@ -608,7 +628,7 @@ Qed.
   Next Obligation.
     destruct infer.
     cbn -[lookup_ind_decl] in *.
-    sq.
+    pose hΣ; sq.
     inversion HT.
     eapply infering_ind_infering in s as [? []] ; eauto.
     apply a0.
@@ -664,29 +684,31 @@ Qed.
   Definition principal_typing Σ Γ t P := 
     forall T, Σ ;;; Γ |- t : T -> Σ ;;; Γ ⊢ P ≤ T.
 
-  Program Definition type_of_typing Γ t (wt : welltyped Σ Γ t) : ∑ T, ∥ (Σ ;;; Γ |- t : T) × principal_typing Σ Γ t T ∥ :=
+  Program Definition type_of_typing Γ t (wt : welltyped gΣ Γ t) : ∑ T, ∥ (gΣ ;;; Γ |- t : T) × principal_typing gΣ Γ t T ∥ :=
     let it := infer Γ _ t _ in
     (it.π1; _).
   Next Obligation.
     destruct wt; sq; pcuic.
   Qed.
   Next Obligation.
-    sq.
+    pose hΣ; sq.
     destruct wt as [T Ht].
     eapply BDFromPCUIC.typing_infering in Ht as [T' [inf _]].
     now exists T'.
   Qed.
   Next Obligation.
-    cbn in *. subst it.
+    cbn in *. subst it. destruct hΣ as [wΣ]. 
     destruct infer as []; cbn.
     destruct wt as [T' HT'].
-    sq. split.
+    sq.
+    split.
     eapply BDToPCUIC.infering_typing in s; pcuic.
     intros T'' HT''.
     apply typing_infering in HT'' as [P [HP HP']].
-    eapply infering_checking;tea. 1-2: pcuic. fvs.
+    eapply infering_checking;tea. 1-2: pcuic.
+    admit. (* fvs. *)
     econstructor; tea. now eapply equality_forget in HP'.
-  Qed.
+  Admitted.
     
   Open Scope type_scope.
   
@@ -698,8 +720,8 @@ Qed.
 
   Arguments iswelltyped {cf Σ Γ t A}.
 
-  Equations? type_of_subtype {Γ t T} (wt : ∥ Σ ;;; Γ |- t : T ∥) :
-    ∥ Σ ;;; Γ ⊢ type_of Γ _ t _ ≤ T ∥ :=
+  Equations? type_of_subtype {Γ t T} (wt : ∥ gΣ ;;; Γ |- t : T ∥) :
+    ∥ gΣ ;;; Γ ⊢ type_of Γ _ t _ ≤ T ∥ :=
     type_of_subtype wt := _.
   Proof.
     - case wt as [wt'].
@@ -713,7 +735,7 @@ Qed.
       exact i.
     - unfold type_of.
       destruct infer as [P HP].
-      sq. simpl.
+      pose hΣ; sq. simpl.
       eapply infering_checking ; eauto.
       + now eapply typing_wf_local.
       + now eapply type_is_open_term.
@@ -724,21 +746,21 @@ Qed.
     computationally but the proof it is principal is squashed (in Prop).
     The [PCUICPrincipality.principal_type] proof gives an unsquashed version of the same theorem. *)
     
-  Theorem principal_types {Γ t} (wt : welltyped Σ Γ t) : 
-    ∑ P, ∥ forall T, Σ ;;; Γ |- t : T -> (Σ ;;; Γ |- t : P) * (Σ ;;; Γ ⊢ P ≤ T) ∥.
+  Theorem principal_types {Γ t} (wt : welltyped gΣ Γ t) : 
+    ∑ P, ∥ forall T, gΣ ;;; Γ |- t : T -> (gΣ ;;; Γ |- t : P) * (gΣ ;;; Γ ⊢ P ≤ T) ∥.
   Proof.
     unshelve eexists (infer Γ _ t _).
     - destruct wt.
-      sq.
+      pose hΣ; sq.
       now eapply typing_wf_local.
-    - sq.
+    - pose hΣ; sq.
       destruct wt as [? wt].
       eapply typing_infering in wt as [? []].
       econstructor.
       eassumption.
     - destruct infer as [T [i]].
       cbn.
-      sq.
+      pose hΣ; sq.
       intros T' ; split.
       + apply infering_typing ; eauto.
         now eapply typing_wf_local.

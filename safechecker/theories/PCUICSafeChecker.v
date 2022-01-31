@@ -8,7 +8,7 @@ From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICTactics
      PCUICPosition PCUICCumulativity PCUICSafeLemmata PCUICSN
      PCUICPretty PCUICArities PCUICConfluence PCUICSize
      PCUICContextConversion PCUICConversion PCUICWfUniverses
-     PCUICGlobalEnv PCUICEqualityDec
+     PCUICGlobalEnv
      (* Used for support lemmas *)
      PCUICInductives PCUICWfUniverses
      PCUICContexts PCUICSubstitution PCUICSpine PCUICInductiveInversion
@@ -16,7 +16,7 @@ From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICTactics
      PCUICOnFreeVars PCUICWellScopedCumulativity
      BDTyping BDFromPCUIC BDToPCUIC.
 
-From MetaCoq.SafeChecker Require Import PCUICSafeReduce PCUICErrors
+From MetaCoq.SafeChecker Require Import PCUICEqualityDec PCUICSafeReduce PCUICErrors
   PCUICSafeConversion PCUICWfReduction PCUICWfEnv PCUICTypeChecker.
 
 From Equations Require Import Equations.
@@ -216,35 +216,6 @@ Section CheckEnv.
     destruct (eqb_spec id k); [discriminate|].
     easy.
   Defined.
-
-  (* We pack up all the information required on the global environment and graph in a 
-    single record. *)
-
-  Record wf_env {cf:checker_flags} := { 
-    wf_env_env :> global_env;
-    wf_env_wf :> ∥ wf wf_env_env ∥;
-    wf_env_graph :> universes_graph;
-    wf_env_graph_wf : is_graph_of_uctx wf_env_graph (global_uctx wf_env_env)
-  }.
-
-  Record wf_env_ext {cf:checker_flags} := { 
-      wf_env_ext_env :> global_env_ext;
-      wf_env_ext_wf :> ∥ wf_ext wf_env_ext_env ∥;
-      wf_env_ext_graph :> universes_graph;
-      wf_env_ext_graph_wf : is_graph_of_uctx wf_env_ext_graph (global_ext_uctx wf_env_ext_env)
-  }.
-
-  Definition wf_env_sq_wf (Σ : wf_env) : ∥ wf Σ ∥.
-  Proof.
-    destruct (wf_env_wf Σ).
-    sq. apply X.
-  Qed.
-  
-  Definition wf_env_ext_sq_wf (Σ : wf_env_ext) : ∥ wf Σ ∥.
-  Proof.
-    destruct (wf_env_ext_wf Σ).
-    sq. apply X.
-  Qed.
 
   Section UniverseChecks.
   Obligation Tactic := idtac.
