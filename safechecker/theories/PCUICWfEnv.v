@@ -9,76 +9,24 @@ From MetaCoq.SafeChecker Require Import PCUICEqualityDec.
 (* We pack up all the information required on the global environment and graph in a 
    single record. *)
 
-Class wf_env_struct {cf:checker_flags} (wf_env_impl : Type) := {
-  wf_env_lookup : wf_env_impl -> kername -> option global_decl;
-  wf_env_eq : wf_env_impl -> Universe.t -> Universe.t -> bool;
-  wf_env_leq : wf_env_impl -> Universe.t -> Universe.t -> bool;
-  wf_env_compare_global_instance : wf_env_impl -> (Universe.t -> Universe.t -> bool) -> global_reference -> nat -> list Level.t -> list Level.t -> bool;
-  wf_env_universe : wf_env_impl -> Universe.t -> bool;
-  (* This part of the structure is here to state the correctness properties *)
-  wf_env_env : wf_env_impl -> global_env_ext ;
-  wf_env_graph : wf_env_impl -> universes_graph;
-}.
+Lemma wf_gc_of_uctx {cf:checker_flags} {Σ : global_env} (HΣ : ∥ wf Σ ∥)
+  : ∑ uctx', gc_of_uctx (global_uctx Σ) = Some uctx'.
+Proof.
+  assert (consistent (global_uctx Σ).2) as HC. 
+  { sq; apply (wf_consistent _ HΣ). }
+  unfold gc_of_uctx; simpl in *.
+  apply gc_consistent_iff in HC.
+  destruct (gc_of_constraints (global_constraints Σ)).
+  eexists; reflexivity.
+  contradiction HC.
+Defined.
 
-Class wf_env_prop {cf:checker_flags} (wf_env_impl : Type) (X : wf_env_struct wf_env_impl) : Prop := {
-  wf_env_lookup_correct X c : 
-    lookup_env (wf_env_env X) c = wf_env_lookup X c ;
-  wf_env_eq_correct X : check_eqb_universe (wf_env_graph X) = wf_env_eq X;
-  wf_env_leq_correct X : check_leqb_universe (wf_env_graph X) = wf_env_leq X;
-  wf_env_compare_global_instance_correct X : 
-    compare_global_instance (wf_env_env X) (check_eqb_universe (wf_env_graph X)) = 
-    wf_env_compare_global_instance X;
-  wf_env_universe_correct X u : wf_universeb (wf_env_env X) u = wf_env_universe X u;
-  wf_env_wf X : ∥ wf_ext (wf_env_env X) ∥;
-  wf_env_graph_wf X : 
-      is_graph_of_uctx (wf_env_graph X) (global_ext_uctx (wf_env_env X))
-   }.
-
-Definition wf_env_impl {cf:checker_flags} := ∑ X Y, wf_env_prop X Y. 
-
-Global Instance wf_env_impl_wf_env_struct {cf:checker_flags} (Σ : wf_env_impl) : wf_env_struct Σ.π1.
-  exact (Σ.π2.π1).
-Defined. 
-
-Global Instance wf_env_impl_wf_env_prop {cf:checker_flags} (Σ : wf_env_impl) : wf_env_prop Σ.π1 _.
-  exact (Σ.π2.π2).
-Defined. 
-
-Definition wf_env_ext_sq_wf {cf:checker_flags} (Σ : wf_env_impl) (x : Σ.π1) : ∥ wf (wf_env_env x) ∥.
-  destruct (wf_env_wf x).
-  sq. auto. 
-Qed.
-
-Record wf_env_ext {cf:checker_flags} := { 
-      wf_env_ext_env :> global_env_ext;
-      wf_env_ext_wf :> ∥ wf_ext wf_env_ext_env ∥;
-      wf_env_ext_graph :> universes_graph;
-      wf_env_ext_graph_wf : is_graph_of_uctx wf_env_ext_graph (global_ext_uctx wf_env_ext_env)
-  }.
-
-Program Definition canonincal_wf_env_struct {cf:checker_flags} : 
-  wf_env_struct wf_env_ext :=
-  {| wf_env_lookup := fun Σ => lookup_env (wf_env_ext_env Σ) ;
-     wf_env_eq := fun Σ => check_eqb_universe (wf_env_ext_graph Σ);
-     wf_env_leq := fun Σ => check_leqb_universe (wf_env_ext_graph Σ) ;
-     wf_env_compare_global_instance := fun Σ => 
-      compare_global_instance (wf_env_ext_env Σ) 
-                              (check_eqb_universe (wf_env_ext_graph Σ));
-     wf_env_universe := fun Σ => wf_universeb (wf_env_ext_env Σ);
-     wf_env_env := wf_env_ext_env;
-     wf_env_graph := wf_env_ext_graph ;
-  |}.
-
-Program Definition canonincal_wf_env_prop {cf:checker_flags} :
-  wf_env_prop _ canonincal_wf_env_struct :=
-     {| wf_env_lookup_correct X c := eq_refl ;
-        wf_env_eq_correct X := eq_refl;
-        wf_env_leq_correct X := eq_refl ;
-        wf_env_compare_global_instance_correct X := eq_refl;
-        wf_env_universe_correct X u := eq_refl;
-        wf_env_wf X := wf_env_ext_wf X ;
-        wf_env_graph_wf X := wf_env_ext_graph_wf X ;
-  |}.
+Lemma graph_of_wf {cf:checker_flags} {Σ : global_env} (HΣ : ∥ wf Σ ∥)
+  : ∑ G, is_graph_of_uctx G (global_uctx Σ).
+Proof.
+  destruct (wf_gc_of_uctx HΣ) as [uctx Huctx].
+  exists (make_graph uctx). unfold is_graph_of_uctx. now rewrite Huctx.
+Defined.
 
 Lemma wf_ext_gc_of_uctx {cf:checker_flags} {Σ : global_env_ext} (HΣ : ∥ wf_ext Σ ∥)
   : ∑ uctx', gc_of_uctx (global_ext_uctx Σ) = Some uctx'.
@@ -100,6 +48,75 @@ Proof.
   destruct (wf_ext_gc_of_uctx HΣ) as [uctx Huctx].
   exists (make_graph uctx). unfold is_graph_of_uctx. now rewrite Huctx.
 Defined.
+
+Class wf_env_struct {cf:checker_flags} (wf_env_impl : Type) := {
+  wf_env_lookup : wf_env_impl -> kername -> option global_decl;
+  wf_env_eq : wf_env_impl -> Universe.t -> Universe.t -> bool;
+  wf_env_leq : wf_env_impl -> Universe.t -> Universe.t -> bool;
+  wf_env_compare_global_instance : wf_env_impl -> (Universe.t -> Universe.t -> bool) -> global_reference -> nat -> list Level.t -> list Level.t -> bool;
+  wf_env_universe : wf_env_impl -> Universe.t -> bool;
+  (* This part of the structure is here to state the correctness properties *)
+  wf_env_env : wf_env_impl -> global_env_ext ;
+}.
+
+Class wf_env_prop {cf:checker_flags} (wf_env_impl : Type) (X : wf_env_struct wf_env_impl) : Prop := {
+  wf_env_wf X : ∥ wf_ext (wf_env_env X) ∥;
+  wf_env_graph X : universes_graph := projT1 (graph_of_wf_ext (wf_env_wf X)) ;
+  wf_env_graph_wf X : is_graph_of_uctx (wf_env_graph X) (global_ext_uctx (wf_env_env X))
+    := projT2 (graph_of_wf_ext (wf_env_wf X));
+  wf_env_lookup_correct X c : 
+    lookup_env (wf_env_env X) c = wf_env_lookup X c ;
+  wf_env_eq_correct X : check_eqb_universe (wf_env_graph X) = wf_env_eq X;
+  wf_env_leq_correct X : check_leqb_universe (wf_env_graph X) = wf_env_leq X;
+  wf_env_compare_global_instance_correct X : 
+    compare_global_instance (wf_env_env X) (check_eqb_universe (wf_env_graph X)) = 
+    wf_env_compare_global_instance X;
+  wf_env_universe_correct X u : wf_universeb (wf_env_env X) u = wf_env_universe X u;
+   }.
+
+Definition wf_env_impl {cf:checker_flags} := ∑ X Y, wf_env_prop X Y. 
+
+Global Instance wf_env_impl_wf_env_struct {cf:checker_flags} (Σ : wf_env_impl) : wf_env_struct Σ.π1.
+  exact (Σ.π2.π1).
+Defined. 
+
+Global Instance wf_env_impl_wf_env_prop {cf:checker_flags} (Σ : wf_env_impl) : wf_env_prop Σ.π1 _.
+  exact (Σ.π2.π2).
+Defined. 
+
+Definition wf_env_ext_sq_wf {cf:checker_flags} (Σ : wf_env_impl) (x : Σ.π1) : ∥ wf (wf_env_env x) ∥.
+  destruct (wf_env_wf x).
+  sq. auto. 
+Qed.
+
+Record wf_env_ext {cf:checker_flags} := { 
+      wf_env_ext_env :> global_env_ext;
+      wf_env_ext_wf :> ∥ wf_ext wf_env_ext_env ∥;
+      wf_env_ext_graph := projT1 (graph_of_wf_ext wf_env_ext_wf);
+      wf_env_ext_graph_wf := projT2 (graph_of_wf_ext wf_env_ext_wf)
+  }.
+
+Program Definition canonincal_wf_env_struct {cf:checker_flags} : 
+  wf_env_struct wf_env_ext :=
+  {| wf_env_lookup := fun Σ => lookup_env (wf_env_ext_env Σ) ;
+     wf_env_eq := fun Σ => check_eqb_universe (wf_env_ext_graph Σ);
+     wf_env_leq := fun Σ => check_leqb_universe (wf_env_ext_graph Σ) ;
+     wf_env_compare_global_instance := fun Σ => 
+      compare_global_instance (wf_env_ext_env Σ) 
+                              (check_eqb_universe (wf_env_ext_graph Σ));
+     wf_env_universe := fun Σ => wf_universeb (wf_env_ext_env Σ);
+     wf_env_env := wf_env_ext_env;
+  |}.
+
+Program Definition canonincal_wf_env_prop {cf:checker_flags} :
+  wf_env_prop _ canonincal_wf_env_struct :=
+     {| wf_env_lookup_correct X c := eq_refl ;
+        wf_env_eq_correct X := eq_refl;
+        wf_env_leq_correct X := eq_refl ;
+        wf_env_compare_global_instance_correct X := eq_refl;
+        wf_env_universe_correct X u := eq_refl;
+        wf_env_wf X := wf_env_ext_wf X ;
+  |}.
 
 Section GraphSpec.
   Context {cf:checker_flags} {Σ : global_env_ext} (HΣ : ∥ wf Σ ∥)

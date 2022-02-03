@@ -184,8 +184,7 @@ Proof.
     - cbn.
       auto. }
   pose proof (iswelltyped _ _ _ _ typ_false) as wt.
-  pose proof (G' := graph_of_wf_ext (sq wf')).
-  set (_Σ' := Build_wf_env_ext cf Σext (sq wf') (projT1 G') (projT2 G')).
+  set (_Σ' := Build_wf_env_ext cf Σext (sq wf')).
   pose proof (hnf_sound (Σ_type := canonical_wf_env_impl) (_Σ := _Σ') (h := wt)) as [r].
   pose proof (hnf_complete (Σ_type := canonical_wf_env_impl) (_Σ := _Σ') (h := wt)) as [w].
   eapply subject_reduction_closed in typ_false; eauto.
