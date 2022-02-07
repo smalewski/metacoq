@@ -1061,17 +1061,17 @@ Axiom normalisation_gen :
     intros x y H HR.
     pose proof (heΣ := heΣ _ wfΣ).
     pose proof (hΣ := hΣ _ wfΣ).
-    clear wfΣ X_type X. 
+    clear wfΣ X_type X.
     sq.
-(*    depelim HR.
-    - eapply cored_welltyped; eauto. econstructor.
-      econstructor.
+    destruct x as [x πx], y as [y πy].
+    dependent induction HR.
+    - eapply cored_welltyped. all: eauto.
     - simpl in H1. revert H1; intros [= H2 _].
       now rewrite <- H2.
-  Qed.*) Admitted. 
+  Qed.
 
   Equations reduce_stack_full (Γ : context) (t : term) (π : stack)
-           (h : forall Σ (wfΣ : abstract_env_rel X Σ), welltyped Σ Γ (zip (t,π))) : 
+           (h : forall Σ (wfΣ : abstract_env_rel X Σ), welltyped Σ Γ (zip (t,π))) :
            { t' : term * stack | forall Σ (wfΣ : abstract_env_rel X Σ), Req Σ Γ t' (t, π) /\ Pr t' π /\ Pr' t' } :=
     reduce_stack_full Γ t π h :=
       Fix_F (R := fun t t' => forall Σ (wfΣ : abstract_env_rel X Σ), R Σ Γ t t')
