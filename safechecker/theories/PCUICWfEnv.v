@@ -59,50 +59,22 @@ Class abstract_env_struct {cf:checker_flags} (abstract_env_impl : Type) := {
   abstract_env_rel : abstract_env_impl -> global_env_ext -> Prop;
 }.
 
-
 Class abstract_env_prop {cf:checker_flags} (abstract_env_impl : Type) (X : abstract_env_struct abstract_env_impl) : Prop := {
 
-
   abstract_env_exists X : ∥ ∑ Σ , abstract_env_rel X Σ ∥;
-
-
-
-  abstract_env_irr {X Σ Σ' Γ u v} : abstract_env_rel X Σ -> abstract_env_rel X Σ' 
-        -> ∥ Σ;;; Γ |- u ⇝ v∥ -> ∥Σ';;; Γ |- u ⇝ v ∥;
-
-
+  abstract_env_irr {X Σ Σ'} : 
+    abstract_env_rel X Σ -> abstract_env_rel X Σ' ->  Σ = Σ';
   abstract_env_wf {X Σ} : abstract_env_rel X Σ -> ∥ wf_ext Σ ∥;
-
   abstract_env_graph X {Σ} wfΣ: universes_graph := projT1 (graph_of_wf_ext (abstract_env_wf wfΣ)) ;
-
-
   abstract_env_graph_wf X {Σ} wfΣ : is_graph_of_uctx (abstract_env_graph X wfΣ) (global_ext_uctx Σ)
     := projT2 (graph_of_wf_ext (abstract_env_wf wfΣ));
-
-
   abstract_env_lookup_correct X {Σ} c : abstract_env_rel X Σ -> 
-
     lookup_env Σ c = abstract_env_lookup X c ;
-
-
-
-
   abstract_env_eq_correct X {Σ} (wfΣ : abstract_env_rel X Σ) : check_eqb_universe (abstract_env_graph X wfΣ) = abstract_env_eq X;
-
-
-
-
   abstract_env_leq_correct X {Σ} (wfΣ : abstract_env_rel X Σ) : check_leqb_universe (abstract_env_graph X wfΣ) = abstract_env_leq X;
-
-
   abstract_env_compare_global_instance_correct X {Σ} (wfΣ : abstract_env_rel X Σ) : 
-
     compare_global_instance Σ (check_eqb_universe (abstract_env_graph X wfΣ)) = 
-
     abstract_env_compare_global_instance X;
-
-
-
   abstract_env_universe_correct X {Σ} (wfΣ : abstract_env_rel X Σ) u : wf_universeb Σ u = abstract_env_universe X u;
    }.
 
@@ -121,11 +93,7 @@ Defined.
 Definition abstract_env_cored {cf:checker_flags} (_X : abstract_env_impl) (X : _X.π1) {Σ Σ' Γ u v} : abstract_env_rel X Σ -> abstract_env_rel X Σ' 
 -> cored Σ Γ u v -> cored Σ' Γ u v.
 Proof.
-  intros HΣ HΣ' Hred. induction Hred.
-  - apply sq in X0. eapply abstract_env_irr in X0; eauto. 
-    sq. constructor 1; eauto.
-  - apply sq in X0. eapply abstract_env_irr in X0; eauto. 
-    sq. econstructor 2; eauto.
+  intros HΣ HΣ' Hred. erewrite abstract_env_irr; eauto.
 Defined.           
 
 Definition abstract_env_ext_sq_wf {cf:checker_flags} (X : abstract_env_impl) (x : X.π1) 

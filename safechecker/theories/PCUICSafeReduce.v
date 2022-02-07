@@ -247,14 +247,22 @@ Proof.
   apply hB.
 Qed.
 
-Axiom normalisation_gen :
-  forall Q, 
-  (forall Σ, Q Σ -> ∥ wf_ext Σ ∥) ->
-  forall Γ t,
-    (forall Σ, Q Σ -> welltyped Σ Γ t) ->
-    Acc (fun t t' => forall Σ, (Q Σ) -> cored Σ Γ t t') t.
+Definition R_singleton Abs A 
+  (R : Abs -> A -> A -> Prop) (Q : Abs -> Prop) x (q : Q x) 
+  (HQ : forall x x' , Q x -> Q x' -> x = x') (a a' : A) : 
+  R x a a' <-> (forall x, Q x -> R x a a').
+Proof. 
+  split.
+  - intros H x' q'.  specialize (HQ x x' q q'). subst; eauto.
+  - eauto.
+Defined.
 
-  Corollary R_Acc_aux :
+Definition Acc_equiv A (R R' : A -> A -> Prop) 
+  (Heq : forall a a', R a a' <-> R' a a') a :
+  Acc R a -> Acc R' a.
+Admitted. 
+
+Corollary R_Acc_aux :
     forall Γ t p,
     (forall Σ (wfΣ : abstract_env_rel X Σ), welltyped Σ Γ t) ->
     (Acc (fun t t' => forall Σ (wfΣ : abstract_env_rel X Σ), R_aux Σ Γ t t') (t ; p)).
@@ -267,8 +275,11 @@ Axiom normalisation_gen :
       eapply posR_Acc.
     - destruct (abstract_env_exists X) as [[Σ wfΣ]]; 
       destruct (heΣ _ wfΣ).
-      eapply normalisation_gen; eauto. 
-      intros. exact (heΣ _ H).
+      eapply Acc_equiv; try  
+      eapply normalisation; eauto. 
+      eapply R_singleton with (Q := abstract_env_rel X)
+          (R := fun Σ a a' => cored Σ Γ a a'); eauto.
+      intros; eapply abstract_env_irr; eauto. 
   Defined. 
   
   Corollary R_Acc :
