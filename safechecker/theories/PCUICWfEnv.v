@@ -2,8 +2,8 @@
 (* Distributed under the terms of the MIT license. *)
 From Coq Require Import ProofIrrelevance.
 From MetaCoq.Template Require Import config utils uGraph.
-From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils
-     PCUICReflect PCUICTyping PCUICGlobalEnv PCUICWfUniverses.
+From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICReduction
+PCUICSafeLemmata PCUICReflect PCUICTyping PCUICGlobalEnv PCUICWfUniverses.
      
 From MetaCoq.SafeChecker Require Import PCUICEqualityDec.
 (* We pack up all the information required on the global environment and graph in a 
@@ -49,74 +49,116 @@ Proof.
   exists (make_graph uctx). unfold is_graph_of_uctx. now rewrite Huctx.
 Defined.
 
-Class wf_env_struct {cf:checker_flags} (wf_env_impl : Type) := {
-  wf_env_lookup : wf_env_impl -> kername -> option global_decl;
-  wf_env_eq : wf_env_impl -> Universe.t -> Universe.t -> bool;
-  wf_env_leq : wf_env_impl -> Universe.t -> Universe.t -> bool;
-  wf_env_compare_global_instance : wf_env_impl -> (Universe.t -> Universe.t -> bool) -> global_reference -> nat -> list Level.t -> list Level.t -> bool;
-  wf_env_universe : wf_env_impl -> Universe.t -> bool;
+Class abstract_env_struct {cf:checker_flags} (abstract_env_impl : Type) := {
+  abstract_env_lookup : abstract_env_impl -> kername -> option global_decl;
+  abstract_env_eq : abstract_env_impl -> Universe.t -> Universe.t -> bool;
+  abstract_env_leq : abstract_env_impl -> Universe.t -> Universe.t -> bool;
+  abstract_env_compare_global_instance : abstract_env_impl -> (Universe.t -> Universe.t -> bool) -> global_reference -> nat -> list Level.t -> list Level.t -> bool;
+  abstract_env_universe : abstract_env_impl -> Universe.t -> bool;
   (* This part of the structure is here to state the correctness properties *)
-  wf_env_env : wf_env_impl -> global_env_ext ;
+  abstract_env_rel : abstract_env_impl -> global_env_ext -> Prop;
 }.
 
-Class wf_env_prop {cf:checker_flags} (wf_env_impl : Type) (X : wf_env_struct wf_env_impl) : Prop := {
-  wf_env_wf X : ∥ wf_ext (wf_env_env X) ∥;
-  wf_env_graph X : universes_graph := projT1 (graph_of_wf_ext (wf_env_wf X)) ;
-  wf_env_graph_wf X : is_graph_of_uctx (wf_env_graph X) (global_ext_uctx (wf_env_env X))
-    := projT2 (graph_of_wf_ext (wf_env_wf X));
-  wf_env_lookup_correct X c : 
-    lookup_env (wf_env_env X) c = wf_env_lookup X c ;
-  wf_env_eq_correct X : check_eqb_universe (wf_env_graph X) = wf_env_eq X;
-  wf_env_leq_correct X : check_leqb_universe (wf_env_graph X) = wf_env_leq X;
-  wf_env_compare_global_instance_correct X : 
-    compare_global_instance (wf_env_env X) (check_eqb_universe (wf_env_graph X)) = 
-    wf_env_compare_global_instance X;
-  wf_env_universe_correct X u : wf_universeb (wf_env_env X) u = wf_env_universe X u;
+
+Class abstract_env_prop {cf:checker_flags} (abstract_env_impl : Type) (X : abstract_env_struct abstract_env_impl) : Prop := {
+
+
+  abstract_env_exists X : ∥ ∑ Σ , abstract_env_rel X Σ ∥;
+
+
+
+  abstract_env_irr {X Σ Σ' Γ u v} : abstract_env_rel X Σ -> abstract_env_rel X Σ' 
+        -> ∥ Σ;;; Γ |- u ⇝ v∥ -> ∥Σ';;; Γ |- u ⇝ v ∥;
+
+
+  abstract_env_wf {X Σ} : abstract_env_rel X Σ -> ∥ wf_ext Σ ∥;
+
+  abstract_env_graph X {Σ} wfΣ: universes_graph := projT1 (graph_of_wf_ext (abstract_env_wf wfΣ)) ;
+
+
+  abstract_env_graph_wf X {Σ} wfΣ : is_graph_of_uctx (abstract_env_graph X wfΣ) (global_ext_uctx Σ)
+    := projT2 (graph_of_wf_ext (abstract_env_wf wfΣ));
+
+
+  abstract_env_lookup_correct X {Σ} c : abstract_env_rel X Σ -> 
+
+    lookup_env Σ c = abstract_env_lookup X c ;
+
+
+
+
+  abstract_env_eq_correct X {Σ} (wfΣ : abstract_env_rel X Σ) : check_eqb_universe (abstract_env_graph X wfΣ) = abstract_env_eq X;
+
+
+
+
+  abstract_env_leq_correct X {Σ} (wfΣ : abstract_env_rel X Σ) : check_leqb_universe (abstract_env_graph X wfΣ) = abstract_env_leq X;
+
+
+  abstract_env_compare_global_instance_correct X {Σ} (wfΣ : abstract_env_rel X Σ) : 
+
+    compare_global_instance Σ (check_eqb_universe (abstract_env_graph X wfΣ)) = 
+
+    abstract_env_compare_global_instance X;
+
+
+
+  abstract_env_universe_correct X {Σ} (wfΣ : abstract_env_rel X Σ) u : wf_universeb Σ u = abstract_env_universe X u;
    }.
 
-Definition wf_env_impl {cf:checker_flags} := ∑ X Y, wf_env_prop X Y. 
 
-Global Instance wf_env_impl_wf_env_struct {cf:checker_flags} (Σ : wf_env_impl) : wf_env_struct Σ.π1.
+
+Definition abstract_env_impl {cf:checker_flags} := ∑ X Y, abstract_env_prop X Y. 
+
+Global Instance abstract_env_impl_abstract_env_struct {cf:checker_flags} (Σ : abstract_env_impl) : abstract_env_struct Σ.π1.
   exact (Σ.π2.π1).
 Defined. 
 
-Global Instance wf_env_impl_wf_env_prop {cf:checker_flags} (Σ : wf_env_impl) : wf_env_prop Σ.π1 _.
+Global Instance abstract_env_impl_abstract_env_prop {cf:checker_flags} (Σ : abstract_env_impl) : abstract_env_prop Σ.π1 _.
   exact (Σ.π2.π2).
 Defined. 
 
-Definition wf_env_ext_sq_wf {cf:checker_flags} (Σ : wf_env_impl) (x : Σ.π1) : ∥ wf (wf_env_env x) ∥.
-  destruct (wf_env_wf x).
+Definition abstract_env_cored {cf:checker_flags} (_X : abstract_env_impl) (X : _X.π1) {Σ Σ' Γ u v} : abstract_env_rel X Σ -> abstract_env_rel X Σ' 
+-> cored Σ Γ u v -> cored Σ' Γ u v.
+Proof.
+  intros HΣ HΣ' Hred. induction Hred.
+  - apply sq in X0. eapply abstract_env_irr in X0; eauto. 
+    sq. constructor 1; eauto.
+  - apply sq in X0. eapply abstract_env_irr in X0; eauto. 
+    sq. econstructor 2; eauto.
+Defined.           
+
+Definition abstract_env_ext_sq_wf {cf:checker_flags} (X : abstract_env_impl) (x : X.π1) 
+  Σ (wfΣ : abstract_env_rel x Σ) : ∥ wf Σ∥.
+  destruct (abstract_env_wf wfΣ).
   sq. auto. 
 Qed.
 
-Record wf_env_ext {cf:checker_flags} := { 
-      wf_env_ext_env :> global_env_ext;
-      wf_env_ext_wf :> ∥ wf_ext wf_env_ext_env ∥;
-      wf_env_ext_graph := projT1 (graph_of_wf_ext wf_env_ext_wf);
-      wf_env_ext_graph_wf := projT2 (graph_of_wf_ext wf_env_ext_wf)
+Record abstract_env_ext {cf:checker_flags} := { 
+      abstract_env_ext_env :> global_env_ext;
+      abstract_env_ext_wf :> ∥ wf_ext abstract_env_ext_env ∥;
+      abstract_env_ext_graph := projT1 (graph_of_wf_ext abstract_env_ext_wf);
+      abstract_env_ext_graph_wf := projT2 (graph_of_wf_ext abstract_env_ext_wf)
   }.
 
-Program Definition canonincal_wf_env_struct {cf:checker_flags} : 
-  wf_env_struct wf_env_ext :=
-  {| wf_env_lookup := fun Σ => lookup_env (wf_env_ext_env Σ) ;
-     wf_env_eq := fun Σ => check_eqb_universe (wf_env_ext_graph Σ);
-     wf_env_leq := fun Σ => check_leqb_universe (wf_env_ext_graph Σ) ;
-     wf_env_compare_global_instance := fun Σ => 
-      compare_global_instance (wf_env_ext_env Σ) 
-                              (check_eqb_universe (wf_env_ext_graph Σ));
-     wf_env_universe := fun Σ => wf_universeb (wf_env_ext_env Σ);
-     wf_env_env := wf_env_ext_env;
+Program Definition canonincal_abstract_env_struct {cf:checker_flags} : 
+  abstract_env_struct abstract_env_ext :=
+  {| abstract_env_lookup := fun Σ => lookup_env (abstract_env_ext_env Σ) ;
+     abstract_env_eq := fun Σ => check_eqb_universe (abstract_env_ext_graph Σ);
+     abstract_env_leq := fun Σ => check_leqb_universe (abstract_env_ext_graph Σ) ;
+     abstract_env_compare_global_instance := fun Σ => 
+      compare_global_instance (abstract_env_ext_env Σ) 
+                              (check_eqb_universe (abstract_env_ext_graph Σ));
+     abstract_env_universe := fun Σ => wf_universeb (abstract_env_ext_env Σ);
+
+
+     abstract_env_rel := fun X Σ => Σ = abstract_env_ext_env X;
   |}.
 
-Program Definition canonincal_wf_env_prop {cf:checker_flags} :
-  wf_env_prop _ canonincal_wf_env_struct :=
-     {| wf_env_lookup_correct X c := eq_refl ;
-        wf_env_eq_correct X := eq_refl;
-        wf_env_leq_correct X := eq_refl ;
-        wf_env_compare_global_instance_correct X := eq_refl;
-        wf_env_universe_correct X u := eq_refl;
-        wf_env_wf X := wf_env_ext_wf X ;
-  |}.
+Program Definition canonincal_abstract_env_prop {cf:checker_flags} :
+  abstract_env_prop _ canonincal_abstract_env_struct := 
+     {| abstract_env_exists := fun Σ => sq (abstract_env_ext_env Σ ; eq_refl); |}.
+Next Obligation. apply abstract_env_ext_wf. Defined. 
 
 Section GraphSpec.
   Context {cf:checker_flags} {Σ : global_env_ext} (HΣ : ∥ wf Σ ∥)
