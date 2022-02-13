@@ -105,18 +105,18 @@ Qed.
 Record abstract_env_ext {cf:checker_flags} := { 
       abstract_env_ext_env :> global_env_ext;
       abstract_env_ext_wf :> ∥ wf_ext abstract_env_ext_env ∥;
-      abstract_env_ext_graph := projT1 (graph_of_wf_ext abstract_env_ext_wf);
-      abstract_env_ext_graph_wf := projT2 (graph_of_wf_ext abstract_env_ext_wf)
+      abstract_env_ext_graph_ := projT1 (graph_of_wf_ext abstract_env_ext_wf);
+      abstract_env_ext_graph_wf_ := projT2 (graph_of_wf_ext abstract_env_ext_wf)
   }.
 
 Program Definition canonincal_abstract_env_struct {cf:checker_flags} : 
   abstract_env_struct abstract_env_ext :=
   {| abstract_env_lookup := fun Σ => lookup_env (abstract_env_ext_env Σ) ;
-     abstract_env_eq := fun Σ => check_eqb_universe (abstract_env_ext_graph Σ);
-     abstract_env_leq := fun Σ => check_leqb_universe (abstract_env_ext_graph Σ) ;
+     abstract_env_eq := fun Σ => check_eqb_universe (abstract_env_ext_graph_ Σ);
+     abstract_env_leq := fun Σ => check_leqb_universe (abstract_env_ext_graph_ Σ) ;
      abstract_env_compare_global_instance := fun Σ => 
       compare_global_instance (abstract_env_ext_env Σ) 
-                              (check_eqb_universe (abstract_env_ext_graph Σ));
+                              (check_eqb_universe (abstract_env_ext_graph_ Σ));
      abstract_env_universe := fun Σ => wf_universeb (abstract_env_ext_env Σ);
 
 
