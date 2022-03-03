@@ -117,18 +117,18 @@ Qed.
 
 Definition binder := {| binder_name := nNamed "P"; binder_relevance := Relevant |}.
 
-Definition canonical_wf_env_impl {cf:checker_flags} : wf_env_impl := 
-  (wf_env_ext ; canonincal_wf_env_struct ; canonincal_wf_env_prop).
+Definition canonical_abstract_env_impl {cf:checker_flags} : abstract_env_impl := 
+  (abstract_env_ext ; canonincal_abstract_env_struct ; canonincal_abstract_env_prop).
 
 
-Theorem pcuic_consistent {cf:checker_flags} {nor : normalizing_flags} (_Σ :wf_env_ext) t :
+Theorem pcuic_consistent {cf:checker_flags} {nor : normalizing_flags} (_Σ :abstract_env_ext) t :
   axiom_free _Σ ->
   (* t : forall (P : Prop), P *)
   _Σ ;;; [] |- t : tProd binder (tSort Prop_univ) (tRel 0) ->
   False.
 Proof.
   intros axfree cons.
-  set (Σ := wf_env_ext_env _Σ); set (wfΣ := wf_env_ext_wf _Σ).
+  set (Σ := abstract_env_ext_env _Σ); set (wfΣ := abstract_env_ext_wf _Σ).
   set (Σext := ((make_fresh_name Σ, InductiveDecl False_mib) :: Σ.1, Σ.2)).
   destruct wfΣ as [wfΣ].
   assert (wf': wf_ext Σext).
@@ -184,9 +184,11 @@ Proof.
     - cbn.
       auto. }
   pose proof (iswelltyped _ _ _ _ typ_false) as wt.
-  set (_Σ' := Build_wf_env_ext cf Σext (sq wf')).
-  pose proof (hnf_sound (Σ_type := canonical_wf_env_impl) (_Σ := _Σ') (h := wt)) as [r].
-  pose proof (hnf_complete (Σ_type := canonical_wf_env_impl) (_Σ := _Σ') (h := wt)) as [w].
+  set (_Σ' := Build_abstract_env_ext cf Σext (sq wf')).
+  unshelve epose proof (hnf_sound (X_type := canonical_abstract_env_impl) (X := _Σ') (Γ := []) (t := tApp t False_ty) Σext eq_refl) as [r].
+  1 : cbn; intros; subst; exact wt.
+  unshelve epose proof (hnf_complete (X_type := canonical_abstract_env_impl) (X := _Σ') (Γ := []) (t := tApp t False_ty) Σext eq_refl) as [w].
+  1 : cbn; intros; subst; exact wt.
   eapply subject_reduction_closed in typ_false; eauto.
   eapply whnf_ind_finite with (indargs := []) in typ_false as ctor; auto.
   - unfold isConstruct_app in ctor.

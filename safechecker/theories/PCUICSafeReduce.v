@@ -1875,9 +1875,8 @@ Section ReduceFns.
 
   Equations? reduce_to_sort (Γ : context) (t : term) 
     (h : forall Σ (wfΣ : abstract_env_rel X Σ), welltyped Σ Γ t)
-    Σ (wfΣ : abstract_env_rel X Σ)
-    : typing_result_comp (∑ u, ∥ Σ ;;; Γ ⊢ t ⇝ tSort u ∥) :=
-    reduce_to_sort Γ t h Σ wfΣ with view_sortc t := {
+    : typing_result_comp (∑ u, forall Σ (wfΣ : abstract_env_rel X Σ), ∥ Σ ;;; Γ ⊢ t ⇝ tSort u ∥) :=
+    reduce_to_sort Γ t h with view_sortc t := {
       | view_sort_sort s => Checked_comp (s; _);
       | view_sort_other t _ with inspect (hnf Γ t h) :=
         | exist hnft eq with view_sortc hnft := {
@@ -1891,7 +1890,8 @@ Section ReduceFns.
       eapply (wt_closed_red_refl hs).
     * pose proof (hnf_sound (h:=h)).
       now rewrite eq. 
-    * pose proof (hΣ := hΣ _ X _ wfΣ). sq.
+    * destruct (abstract_env_exists X) as [[Σ wfΣ]]. specialize (X1 _ wfΣ).
+      pose proof (hΣ := hΣ _ X _ wfΣ). sq.
       pose proof (@hnf_complete Γ t h) as [wh]; eauto. 
       pose proof (@hnf_sound Γ t h) as [r']; eauto.
       eapply PCUICContextConversion.closed_red_confluence in X1 as (?&r1&r2); eauto.
@@ -1904,21 +1904,22 @@ Section ReduceFns.
 
   Lemma reduce_to_sort_complete {Γ t wt} Σ (wfΣ : abstract_env_rel X Σ)  
     e p :
-    reduce_to_sort Γ t wt Σ wfΣ = TypeError_comp e p ->
+    reduce_to_sort Γ t wt = TypeError_comp e p ->
     (forall s, red Σ Γ t (tSort s) -> False).
   Proof.
     intros _ s r.
     apply p.
     exists s.
-    pose proof (hΣ := hΣ _ X _ wfΣ). sq.
+    intros.
+    erewrite abstract_env_irr; try apply wfΣ; eauto. 
+    pose proof (hΣ := hΣ _ X _ wfΣ). sq.  
     eapply into_closed_red in r ; fvs.
   Qed.
 
   Equations? reduce_to_prod (Γ : context) (t : term) 
-    Σ (wfΣ : abstract_env_rel X Σ)
     (h : forall Σ (wfΣ : abstract_env_rel X Σ), welltyped Σ Γ t)
-    : typing_result_comp (∑ na a b, ∥ Σ ;;; Γ ⊢ t ⇝ tProd na a b ∥) :=
-    reduce_to_prod Γ t Σ wfΣ h with view_prodc t := {
+    : typing_result_comp (∑ na a b, forall  Σ (wfΣ : abstract_env_rel X Σ), ∥ Σ ;;; Γ ⊢ t ⇝ tProd na a b ∥) :=
+    reduce_to_prod Γ t h with view_prodc t := {
       | view_prod_prod na a b => Checked_comp (na; a; b; _);
       | view_prod_other t _ with inspect (hnf Γ t h) :=
         | exist hnft eq with view_prodc hnft := {
@@ -1932,7 +1933,9 @@ Section ReduceFns.
       now eapply wt_closed_red_refl.
     * pose proof (hnf_sound (h:=h)).
       now rewrite eq.
-    * sq.
+    * destruct (abstract_env_exists X) as [[Σ wfΣ]].
+      specialize (X3 _ wfΣ).
+      sq.
       pose proof (@hnf_complete Γ t h) as [wh]; eauto.
       pose proof (@hnf_sound Γ t h) as [r']; eauto. 
       destruct (hΣ _ _ _ wfΣ).
@@ -1945,21 +1948,22 @@ Section ReduceFns.
 
   Lemma reduce_to_prod_complete {Γ t wt} Σ (wfΣ : abstract_env_rel X Σ) 
     e p :
-    reduce_to_prod Γ t Σ wfΣ wt = TypeError_comp e p ->
+    reduce_to_prod Γ t wt = TypeError_comp e p ->
     (forall na a b, red Σ Γ t (tProd na a b) -> False).
   Proof.
     intros _ na a b r.
     apply p.
     exists na, a, b.
+    intros.
+    erewrite abstract_env_irr; try apply wfΣ; eauto. 
     pose proof (hΣ := hΣ _ _ _ wfΣ). sq.
     eapply into_closed_red; fvs.
   Qed.
 
   Equations? reduce_to_ind (Γ : context) (t : term) 
-    Σ (wfΣ : abstract_env_rel X Σ)
     (h : forall Σ (wfΣ : abstract_env_rel X Σ), welltyped Σ Γ t)
-    : typing_result_comp (∑ i u l, ∥ Σ ;;; Γ ⊢ t ⇝ mkApps (tInd i u) l ∥) :=
-    reduce_to_ind Γ t Σ wfΣ h with inspect (decompose_app t) := {
+    : typing_result_comp (∑ i u l, forall Σ (wfΣ : abstract_env_rel X Σ), ∥ Σ ;;; Γ ⊢ t ⇝ mkApps (tInd i u) l ∥) :=
+    reduce_to_ind Γ t h with inspect (decompose_app t) := {
       | exist (thd, args) eq_decomp with view_indc thd := {
         | view_ind_tInd i u => Checked_comp (i; u; args; _);
         | view_ind_other thd _ with inspect (reduce_stack RedFlags.default _ X Γ t [] h) := {
@@ -1993,7 +1997,9 @@ Section ReduceFns.
         now destruct decompose_stack. }
       apply decompose_stack_eq in decomp as ->.
       now rewrite <- eq_decomp'.
-    - pose proof (hΣ := hΣ _ _ _ wfΣ). sq.
+    - destruct (abstract_env_exists X) as [[Σ wfΣ]].
+      specialize (X3 _ wfΣ).
+      pose proof (hΣ := hΣ _ _ _ wfΣ). sq.
       pose proof (reduce_stack_whnf RedFlags.default _ X Γ t [] h _  wfΣ) as wh.
       unfold reduce_stack in *.
       destruct reduce_stack_full as ((hd&π')&r'&stack_valid&(notapp&_)); eauto. 
@@ -2023,7 +2029,7 @@ Section ReduceFns.
   Qed.
 
   Lemma reduce_to_ind_complete  Σ (wfΣ : abstract_env_rel X Σ) Γ ty wat e p :
-    reduce_to_ind Γ ty Σ wfΣ wat = TypeError_comp e p ->
+    reduce_to_ind Γ ty wat = TypeError_comp e p ->
     forall ind u args,
       red Σ Γ ty (mkApps (tInd ind u) args) ->
       False.
@@ -2031,6 +2037,8 @@ Section ReduceFns.
     intros _ ind u args' r.
     apply p.
     exists ind, u, args'.
+    intros.
+    erewrite abstract_env_irr; try apply wfΣ; eauto. 
     pose proof (hΣ := hΣ _ _ _ wfΣ). sq.
     eapply into_closed_red ; fvs.
   Qed.

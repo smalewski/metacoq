@@ -186,19 +186,30 @@ Section OnUdecl.
 End OnUdecl.
 
 Section CheckEnv.
-  Context {cf:checker_flags} {nor : normalizing_flags}.
+  Context {cf:checker_flags} {nor : normalizing_flags}
+          {Σ_type : wf_env_impl} {Σ : Σ_type.π1}.
 
-  Definition check_wf_type (kn : kername) (Σ : global_env_ext) (HΣ : ∥ wf_ext Σ ∥)
-    G (HG : is_graph_of_uctx G (global_ext_uctx Σ)) t
-    : EnvCheck (∥ isType Σ [] t ∥) :=
-    wrap_error Σ (string_of_kername kn) (check_isType HΣ G HG [] sq_wfl_nil t).
+    Local Definition gΣ := wf_env_env Σ. 
+    Local Definition heΣ : ∥ wf_ext gΣ ∥ := wf_env_wf Σ.
+  
+    Local Definition Gext : universes_graph := wf_env_graph Σ.
+    Local Definition HGext : is_graph_of_uctx Gext (global_ext_uctx gΣ) := wf_env_graph_wf Σ.
 
-  Definition check_wf_judgement kn Σ HΣ G HG t ty
-    : EnvCheck (∥ Σ;;; [] |- t : ty ∥)
-    := wrap_error Σ (string_of_kername kn) (check HΣ G HG [] sq_wfl_nil t ty).
+    Local Definition HΣ : ∥ wf gΣ ∥ := map_squash (wf_ext_wf _) heΣ.
 
-  Definition infer_term Σ (HΣ : ∥ wf_ext Σ ∥) G HG t :=
-    wrap_error Σ "toplevel term" (infer HΣ G HG [] sq_wfl_nil t).
+    Local Definition G : universes_graph := projT1 (graph_of_wf HΣ).
+    Local Definition HG : is_graph_of_uctx G (global_uctx gΣ) := projT2 (graph_of_wf HΣ).
+
+  Definition check_wf_type (kn : kername) t
+    : EnvCheck (∥ isType gΣ [] t ∥) :=
+    wrap_error gΣ (string_of_kername kn) (check_isType (Σ:=Σ) [] sq_wfl_nil t).
+
+  Definition check_wf_judgement kn t ty
+    : EnvCheck (∥ gΣ;;; [] |- t : ty ∥)
+    := wrap_error gΣ (string_of_kername kn) (check (Σ:=Σ) [] sq_wfl_nil t ty).
+
+  Definition infer_term t :=
+    wrap_error gΣ "toplevel term" (infer (Σ:=Σ) [] sq_wfl_nil t).
 
   Program Fixpoint check_fresh id env : EnvCheck (∥ fresh_global id env ∥) :=
     match env with
@@ -220,42 +231,42 @@ Section CheckEnv.
   Section UniverseChecks.
   Obligation Tactic := idtac.
 
-  Program Definition check_udecl id (Σ : global_env) (HΣ : ∥ wf Σ ∥) G
-          (HG : is_graph_of_uctx G (global_uctx Σ)) (udecl : universes_decl)
+  Program Definition check_udecl id (udecl : universes_decl)
     : EnvCheck (∑ uctx', gc_of_uctx (uctx_of_udecl udecl) = Some uctx' /\
-                         ∥ on_udecl Σ udecl ∥) :=
+                         ∥ on_udecl gΣ udecl ∥) :=
     let levels := levels_of_udecl udecl in
-    let global_levels := global_levels Σ in
+    let global_levels := global_levels gΣ in
     let all_levels := LevelSet.union levels global_levels in
     check_eq_true (LevelSet.for_all (fun l => negb (LevelSet.mem l global_levels)) levels)
-       (empty_ext Σ, IllFormedDecl id (Msg ("non fresh level in " ^ print_lset levels)));;
+       (empty_ext gΣ, IllFormedDecl id (Msg ("non fresh level in " ^ print_lset levels)));;
     check_eq_true (ConstraintSet.for_all (fun '(l1, _, l2) => LevelSet.mem l1 all_levels && LevelSet.mem l2 all_levels) (constraints_of_udecl udecl))
-                                    (empty_ext Σ, IllFormedDecl id (Msg ("non declared level in " ^ print_lset levels ^
+                                    (empty_ext gΣ, IllFormedDecl id (Msg ("non declared level in " ^ print_lset levels ^
                                     " |= " ^ print_constraint_set (constraints_of_udecl udecl))));;
     check_eq_true match udecl with
                   | Monomorphic_ctx ctx
                     => LevelSet.for_all (negb ∘ Level.is_var) ctx.1
                   | _ => true
-                  end (empty_ext Σ, IllFormedDecl id (Msg "Var level in monomorphic context")) ;;
+                  end (empty_ext gΣ, IllFormedDecl id (Msg "Var level in monomorphic context")) ;;
     (* TODO: could be optimized by reusing G *)
     match gc_of_uctx (uctx_of_udecl udecl) as X' return (X' = _ -> EnvCheck _) with
     | None => fun _ =>
-      raise (empty_ext Σ, IllFormedDecl id (Msg "constraints trivially not satisfiable"))
+      raise (empty_ext gΣ, IllFormedDecl id (Msg "constraints trivially not satisfiable"))
     | Some uctx' => fun Huctx =>
       check_eq_true (wGraph.is_acyclic (add_uctx uctx' G))
-                    (empty_ext Σ, IllFormedDecl id (Msg "constraints not satisfiable"));;
+                    (empty_ext gΣ, IllFormedDecl id (Msg "constraints not satisfiable"));;
       ret (uctx'; _)
     end eq_refl.
   Next Obligation.
     Tactics.program_simpl.
   Qed.
   Next Obligation.
+    pose proof HG as HG. 
     simpl. intros. rewrite <- Huctx.
     split; auto.
     assert (HH: ConstraintSet.For_all
                   (fun '(l1, _, l2) =>
-                     LevelSet.In l1 (LevelSet.union (levels_of_udecl udecl) (global_levels Σ)) /\
-                     LevelSet.In l2 (LevelSet.union (levels_of_udecl udecl) (global_levels Σ)))
+                     LevelSet.In l1 (LevelSet.union (levels_of_udecl udecl) (global_levels gΣ)) /\
+                     LevelSet.In l2 (LevelSet.union (levels_of_udecl udecl) (global_levels gΣ)))
                   (constraints_of_udecl udecl)). {
       clear -H0. apply ConstraintSet.for_all_spec in H0.
       2: now intros x y [].
@@ -270,20 +281,19 @@ Section CheckEnv.
       apply negb_true_iff in H. now apply LevelSetFact.not_mem_iff in H.
     - exact HH.
     - clear -H1. destruct udecl; trivial.
-    - clear -HΣ HH Huctx H2 HG. unfold gc_of_uctx, uctx_of_udecl in *.
+    - clear -HH Huctx H2 HG. unfold gc_of_uctx, uctx_of_udecl in *.
       simpl in *.
       unfold satisfiable_udecl.
       unfold is_graph_of_uctx in HG. unfold gc_of_uctx in *.
-      case_eq (gc_of_constraints (global_uctx Σ).2);
-        [|intro XX; rewrite XX in HG; contradiction HG].
-      intros Σctrs HΣctrs.
+      case_eq (gc_of_constraints (global_uctx gΣ).2);
+        [|intro XX; rewrite XX in HG; contradiction HG ].
+      intros Σctrs HΣctrs. rewrite HΣctrs in HG. 
       unfold global_ext_constraints. simpl in *.
-      rewrite HΣctrs in HG. simpl in HG.
       case_eq (gc_of_constraints (constraints_of_udecl udecl));
         [|intro XX; rewrite XX in Huctx; discriminate Huctx].
       intros ctrs Hctrs. rewrite Hctrs in Huctx. simpl in *.
-      eapply (is_consistent_spec (global_ext_uctx (Σ, udecl))).
-      { sq. apply wf_global_uctx_invariants in HΣ.
+      eapply (is_consistent_spec (global_ext_uctx (gΣ, udecl))).
+      { pose HΣ as HΣ. sq. apply wf_global_uctx_invariants in HΣ.
         split.
         + clear -HΣ. cbn. apply LevelSet.union_spec; right.
           apply HΣ.
@@ -294,30 +304,31 @@ Section CheckEnv.
           split; apply LevelSet.union_spec; right; apply HΣ. }
       unfold is_consistent, global_ext_uctx, gc_of_uctx, global_ext_constraints.
       simpl.
-      pose proof (gc_of_constraints_union (constraints_of_udecl udecl) (global_constraints Σ)).
-      rewrite {}HΣctrs {}Hctrs in H. simpl in H.
-      destruct gc_of_constraints. simpl in H.
-      inversion Huctx; subst; clear Huctx.
-      clear -H H2 cf. rewrite add_uctx_make_graph in H2.
+      pose proof (gc_of_constraints_union (constraints_of_udecl udecl) (global_constraints gΣ)).
+      rewrite  {}HΣctrs {}Hctrs in H. simpl in H.
+      destruct (gc_of_constraints (ConstraintSet.union (constraints_of_udecl udecl)
+      (global_constraints gΣ))). simpl in H.
+      inversion Huctx; subst; clear Huctx. rewrite <- HG in H2. 
+      clear -H H2 HG cf. rewrite add_uctx_make_graph in H2.
       refine (eq_rect _ (fun G => wGraph.is_acyclic G = true) H2 _ _).
       apply graph_eq; try reflexivity.
-      + assert(make_graph (global_ext_levels (Σ, udecl), t) = 
-        make_graph (global_ext_levels (Σ, udecl), (GoodConstraintSet.union ctrs Σctrs))).
-        apply graph_eq. simpl; reflexivity.
-        unfold make_graph. simpl.
-        now rewrite H. simpl. reflexivity.
+      + assert(make_graph (global_ext_levels (gΣ, udecl), t) = 
+        make_graph (global_ext_levels (gΣ, udecl), (GoodConstraintSet.union ctrs Σctrs))).
+        { apply graph_eq. simpl; reflexivity.
+          unfold make_graph. simpl.
+          now rewrite H. simpl. reflexivity. }
         rewrite H0. reflexivity.
-      + now simpl in H. 
-    Qed.
+      + now simpl in H.
+    Defined.  
 
-  Program Definition check_wf_env_ext (Σ : global_env) (id : kername) (wfΣ : ∥ wf Σ ∥) (G : universes_graph) 
-    (wfG : is_graph_of_uctx G (global_uctx Σ)) (ext : universes_decl) : 
-    EnvCheck (∑ G, is_graph_of_uctx G (global_ext_uctx (Σ, ext)) /\ ∥ wf_ext (Σ, ext) ∥) :=
-    uctx <- check_udecl (string_of_kername id) Σ wfΣ G wfG ext ;;
+  Program Definition check_wf_env_ext (id : kername) (ext : universes_decl) : 
+    EnvCheck (∑ G, is_graph_of_uctx G (global_ext_uctx (gΣ, ext)) /\ ∥ wf_ext (gΣ, ext) ∥) :=
+    uctx <- check_udecl (string_of_kername id) ext ;;
     let G' := add_uctx uctx.π1 G in
     ret (G'; _).
   Next Obligation.
-    intros. simpl.
+    intros. simpl. pose proof HΣ as HΣ. 
+    pose proof HG as wfG. destruct gΣ as [gΣ foo]. simpl in *. clear foo.   
     destruct uctx as [uctx' [gcof onu]].
     subst G'.
     simpl. split.
@@ -325,26 +336,24 @@ Section CheckEnv.
     unfold global_ext_uctx, gc_of_uctx. simpl.
     unfold gc_of_uctx in gcof. simpl in gcof.
     unfold gc_of_uctx in wfG. unfold global_ext_constraints. simpl in wfG |- *.
-    pose proof (gc_of_constraints_union (constraints_of_udecl ext) (global_constraints Σ)).
-    destruct (gc_of_constraints (global_constraints Σ)); simpl in *; auto.
+    pose proof (gc_of_constraints_union (constraints_of_udecl ext) (global_constraints gΣ)).
+    destruct (gc_of_constraints (global_constraints gΣ)); simpl in *; auto.
     destruct (gc_of_constraints (constraints_of_udecl ext)); simpl in *; auto.
     noconf gcof.
     simpl in H.
     destruct gc_of_constraints; simpl in *; auto.
-    symmetry. subst G.
+    symmetry. rewrite <- wfG.
     rewrite add_uctx_make_graph.
     apply graph_eq; simpl; auto.
     reflexivity. now rewrite H. discriminate.
     sq. pcuic.
   Qed.
 
-  Program Definition make_wf_env_ext (Σ : wf_env) id (ext : universes_decl) : 
+  Program Definition make_wf_env_ext (Σ : global_env) (HΣ : ∥ wf Σ∥) id (ext : universes_decl) : 
     EnvCheck ({ Σ' : wf_env_ext | Σ'.(wf_env_ext_env) = (Σ, ext)}) :=
-    '(G; pf) <- check_wf_env_ext Σ id _ Σ _ ext ;;
+    '(G; pf) <- check_wf_env_ext id ext ;;
     ret (exist {| wf_env_ext_env := (Σ, ext) ;
-           wf_env_ext_wf := _ ;
-           wf_env_ext_graph := G ;
-           wf_env_ext_graph_wf := _ |} eq_refl).
+           wf_env_ext_wf := _ |} eq_refl).
     Next Obligation.
       intros []; simpl; intros. sq. apply wf_env_wf0.
     Qed.
@@ -363,23 +372,22 @@ Section CheckEnv.
     Qed.
   End UniverseChecks.
 
-  Equations infer_typing (Σ : global_env_ext) (HΣ : ∥ wf_ext Σ ∥)
-    (G : universes_graph) (HG : is_graph_of_uctx G (global_ext_uctx Σ)) Γ (wfΓ : ∥ wf_local Σ Γ ∥) t :
-      typing_result (∑ T, ∥ Σ ;;; Γ |- t : T ∥) :=
-    infer_typing Σ HΣ G HG Γ wfΓ t :=
-      typing_error_forget (infer HΣ G HG Γ wfΓ t) ;;
+  Equations infer_typing Γ (wfΓ : ∥ wf_local gΣ Γ ∥) t :
+      typing_result (∑ T, ∥ gΣ ;;; Γ |- t : T ∥) :=
+    infer_typing Γ wfΓ t :=
+      typing_error_forget (infer (Σ:=Σ) Γ wfΓ t) ;;
       ret _.
   Next Obligation.
     exists y.
-    sq.
+    pose HΣ. sq.
     now apply infering_typing.
   Qed.
   
-  Definition check_type_wf_env (Σ : wf_env_ext) Γ (wfΓ : ∥ wf_local Σ Γ ∥) t T : typing_result (∥ Σ ;;; Γ |- t : T ∥) := 
-    check (wf_env_ext_wf Σ) Σ (wf_env_ext_graph_wf Σ) Γ wfΓ t T.
+  Definition check_type_wf_env Γ (wfΓ : ∥ wf_local gΣ Γ ∥) t T : typing_result (∥ gΣ ;;; Γ |- t : T ∥) := 
+    check (Σ:=Σ) Γ wfΓ t T.
   
-  Definition infer_wf_env (Σ : wf_env_ext) Γ (wfΓ : ∥ wf_local Σ Γ ∥) t : typing_result (∑ T, ∥ Σ ;;; Γ |- t ▹ T ∥) := 
-    infer (wf_env_ext_wf Σ) Σ (wf_env_ext_graph_wf Σ) Γ wfΓ t.
+  Definition infer_wf_env Γ (wfΓ : ∥ wf_local gΣ Γ ∥) t : typing_result (∑ T, ∥ gΣ ;;; Γ |- t ▹ T ∥) := 
+    infer (Σ:=Σ)  Γ wfΓ t.
   
   Equations infer_type_wf_ext (Σ : global_env_ext) (wfΣ : ∥ wf_ext Σ ∥) 
     (G : universes_graph) (HG : is_graph_of_uctx G (global_ext_uctx Σ)) Γ (wfΓ : ∥ wf_local Σ Γ ∥) t : 
